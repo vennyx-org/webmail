@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getCachedConfig } from '@/hooks/use-config';
 import type { IJMAPClient } from '@/lib/jmap/client-interface';
 import type { FilterRule, SieveCapabilities, VacationAudience, VacationForward, VacationSieveConfig } from '@/lib/jmap/sieve-types';
 import { parseScript } from '@/lib/sieve/parser';
@@ -240,6 +241,7 @@ export const useFilterStore = create<FilterStore>()((set, get) => ({
           vacationForward,
           vacationAudience,
           extensions: sieveCapabilities?.sieveExtensions,
+          serverIncludes: getCachedConfig()?.sieveServerIncludes,
         });
       }
       const written = await writeFiltersScript(client, selectedAccountId || null, content, activeScriptId);
@@ -601,6 +603,7 @@ export async function syncVacationWithFilters(
       vacationForward: nextForward,
       vacationAudience: nextAudience,
       extensions: capabilities?.sieveExtensions,
+      serverIncludes: getCachedConfig()?.sieveServerIncludes,
     }),
     sieveAccountId,
   );

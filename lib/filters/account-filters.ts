@@ -1,4 +1,5 @@
 import type { IJMAPClient } from '@/lib/jmap/client-interface';
+import { getCachedConfig } from '@/hooks/use-config';
 import type { FilterRule, SieveCapabilities, SieveScript } from '@/lib/jmap/sieve-types';
 import { parseScript, type ParseResult } from '@/lib/sieve/parser';
 import { generateScript, VACATION_SCRIPT_NAME } from '@/lib/sieve/generator';
@@ -147,6 +148,7 @@ export function renderFiltersScript(
     vacationForward: filters.parsed.vacationForward,
     vacationAudience: filters.parsed.vacationAudience,
     extensions: filters.capabilities?.sieveExtensions,
+    serverIncludes: getCachedConfig()?.sieveServerIncludes,
   });
 }
 

@@ -60,6 +60,8 @@ export interface ConfigData {
   oauthRevokeOnSignOut?: boolean;
   /** Fork: password changes go to the external provider (PASSWORD_CHANGE_URL); absent when unset. */
   externalPasswordChange?: boolean;
+  /** Fork: Sieve scripts every filters script includes (SIEVE_SERVER_INCLUDES); absent when unset. */
+  sieveServerIncludes?: string[];
 }
 
 interface AppConfig extends ConfigData {

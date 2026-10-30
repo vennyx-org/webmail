@@ -13,6 +13,7 @@ import {
 } from '@/lib/admin/domain-branding';
 import { isNoThirdPartyTrafficOn } from '@/lib/admin/third-party-mode';
 import { getPasswordChangeUrl } from '@/lib/external-password-change';
+import { getServerSieveIncludes } from '@/lib/sieve/server-includes';
 
 /**
  * Runtime configuration endpoint
@@ -113,6 +114,9 @@ export async function GET(request: NextRequest) {
       // (lib/external-password-change). Left out when unset, so the response
       // stays exactly upstream's.
       ...(getPasswordChangeUrl() ? { externalPasswordChange: true } : {}),
+      // Fork: server-managed Sieve scripts every filters script includes
+      // (lib/sieve/server-includes). Left out when SIEVE_SERVER_INCLUDES is unset.
+      ...(getServerSieveIncludes().length > 0 ? { sieveServerIncludes: getServerSieveIncludes() } : {}),
     },
     {
       // Runtime settings can change without new asset URLs. Prevent stale

@@ -1,3 +1,4 @@
+import { SERVER_INCLUDES_MARKER_RE, isServerIncludeBlock, serverIncludeNamesIn } from '@/lib/sieve/server-includes';
 import type {
   FilterAction,
   FilterCondition,
@@ -893,6 +894,7 @@ export function parseScript(content: string): ParseResult {
     // fell back to opaque - a Bulwark-emitted block may fail to round-trip cleanly
     // (e.g. a value with literal braces) but the `# Rule: <name>` marker still
     // identifies it as ours.
+    const serverIncludes = serverIncludeNamesIn(content);
     const filteredExternal = external.rules.filter(r => {
       const raw = r.rawBlock || '';
       // The name ends with its line, and may be empty.
@@ -906,6 +908,8 @@ export function parseScript(content: string): ParseResult {
         if (bulwarkRules.some(b => oneLine(b.name) === name)) return false;
       }
       if (/#\s*Vacation auto-reply/i.test(raw)) return false;
+      // Fork: the generator writes the server-managed includes again.
+      if (SERVER_INCLUDES_MARKER_RE.test(raw) || isServerIncludeBlock(raw, serverIncludes)) return false;
       // The generator writes the forwarding block from the metadata again.
       // Only written while switched on, so only then is such a block Bulwark's.
       if (metadata.vacationForward?.enabled && VACATION_FORWARD_MARKER_RE.test(raw)) return false;

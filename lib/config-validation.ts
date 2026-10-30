@@ -1,4 +1,5 @@
 import type { ConfigData } from '@/hooks/use-config';
+import { isServerSieveIncludes } from '@/lib/sieve/server-includes';
 import type { PublicJmapServerEntry } from '@/lib/admin/jmap-servers';
 
 type Validator<T> = (value: unknown) => value is T;
@@ -75,6 +76,8 @@ const configValidators = {
   oauthRevokeOnSignOut: (value): value is boolean | undefined => value === undefined || typeof value === 'boolean',
   // Fork: only present when PASSWORD_CHANGE_URL is set (lib/external-password-change).
   externalPasswordChange: (value): value is boolean | undefined => value === undefined || typeof value === 'boolean',
+  // Fork: only present when SIEVE_SERVER_INCLUDES is set (lib/sieve/server-includes).
+  sieveServerIncludes: (value): value is string[] | undefined => value === undefined || isServerSieveIncludes(value),
 } satisfies Validators<ConfigData>;
 
 /**

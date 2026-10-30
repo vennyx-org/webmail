@@ -39,6 +39,8 @@ const MANAGED_ENV = [
   'LOGIN_USERNAME_PLACEHOLDER',
   // Fork: lib/external-password-change.
   'PASSWORD_CHANGE_URL',
+  // Fork: lib/sieve/server-includes.
+  'SIEVE_SERVER_INCLUDES',
 ] as const;
 
 describe('config API route', () => {
@@ -390,6 +392,20 @@ describe('config API route', () => {
       const config = await getConfig();
       expect(config.externalPasswordChange).toBe(true);
       expect(JSON.stringify(config)).not.toContain('self-service');
+    });
+  });
+
+  // Fork: lib/sieve/server-includes.
+  describe('server-managed Sieve includes', () => {
+    it('is left out entirely when SIEVE_SERVER_INCLUDES is unset (response equals upstream)', async () => {
+      const config = await getConfig();
+      expect('sieveServerIncludes' in config).toBe(false);
+    });
+
+    it('lists the valid names when SIEVE_SERVER_INCLUDES is set', async () => {
+      vi.stubEnv('SIEVE_SERVER_INCLUDES', 'mila-junk-filter, bad name');
+      const config = await getConfig();
+      expect(config.sieveServerIncludes).toEqual(['mila-junk-filter']);
     });
   });
 });

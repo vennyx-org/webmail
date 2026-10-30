@@ -1,4 +1,5 @@
 import type { FilterRule, FilterCondition, FilterAction, FilterMetadata, VacationAudience, VacationForward, VacationSieveConfig } from '@/lib/jmap/sieve-types';
+import { SERVER_INCLUDES_MARKER } from '@/lib/sieve/server-includes';
 import { debug } from '@/lib/debug';
 import { PERIOD_REQUIRES, hasPeriod, periodTests } from '@/lib/sieve/period';
 import { VACATION_FORWARD_MARKER, isValidVacationForward, normalizeVacationForward } from '@/lib/sieve/vacation-forward';
@@ -296,6 +297,12 @@ export interface GenerateOptions {
    * lists "mailboxid"; without it they target the folder path only.
    */
   extensions?: string[];
+  /**
+   * Fork: server-managed scripts to include ahead of everything else
+   * (SIEVE_SERVER_INCLUDES, see lib/sieve/server-includes). Only one script
+   * can be active, so this keeps them running while the filters are active.
+   */
+  serverIncludes?: string[];
 }
 
 /** Name of the script a server builds for VacationResponse (RFC 9661). */
@@ -360,6 +367,8 @@ export function generateScript(
   const useMailboxId = options.extensions?.includes('mailboxid') ?? false;
   const bulwarkRequires = computeRequires(bulwarkRules, vacation, useMailboxId, options.extensions);
   if (options.includeVacation) bulwarkRequires.push('include');
+  const serverIncludes = (options.serverIncludes ?? []).filter(name => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name));
+  if (serverIncludes.length > 0) bulwarkRequires.push('include');
   if (options.includeVacation && metadata.vacationAudience) bulwarkRequires.push('envelope');
 
   // Forwarding from the vacation card runs whenever it is switched on, with
@@ -378,6 +387,13 @@ export function generateScript(
 
   if (allRequires.length > 0) {
     lines.push(`require [${allRequires.map(r => `"${r}"`).join(', ')}];`);
+  }
+
+  if (serverIncludes.length > 0) {
+    // First, so a rule below that stops processing cannot skip them.
+    lines.push('');
+    lines.push(SERVER_INCLUDES_MARKER);
+    for (const name of serverIncludes) lines.push(`include :personal :optional "${name}";`);
   }
 
   if (options.includeVacation) {
