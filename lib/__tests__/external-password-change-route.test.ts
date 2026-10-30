@@ -226,4 +226,57 @@ describe('POST /api/account/change-password', () => {
     expect(logged).not.toContain(CURRENT);
     expect(logged).not.toContain(NEXT);
   });
+
+  it('refuses a session against a server the admin did not configure, without calling the provider', async () => {
+    getStalwartCredentials.mockResolvedValueOnce(creds({ trusted: false }));
+
+    const res = await POST(request({ currentPassword: CURRENT, newPassword: NEXT }));
+
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/account/change-password attempt budget', () => {
+  // A fresh module per test: the budgets are module state.
+  async function freshPost() {
+    vi.resetModules();
+    return (await import('@/app/api/account/change-password/route')).POST;
+  }
+
+  it('answers 429 after five rejected current passwords for one account, without calling the provider', async () => {
+    const post = await freshPost();
+    for (let i = 0; i < 5; i++) {
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+      expect((await post(request({ currentPassword: `wrong-${i}`, newPassword: NEXT }))).status).toBe(401);
+    }
+
+    const res = await post(request({ currentPassword: CURRENT, newPassword: NEXT }));
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('counts per account even when the client address changes', async () => {
+    const post = await freshPost();
+    for (let i = 0; i < 5; i++) {
+      fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+      await post(request({ currentPassword: `wrong-${i}`, newPassword: NEXT }, { 'x-forwarded-for': `203.0.113.${i + 1}` }));
+    }
+
+    const res = await post(request({ currentPassword: CURRENT, newPassword: NEXT }, { 'x-forwarded-for': '198.51.100.7' }));
+
+    expect(res.status).toBe(429);
+  });
+
+  it('does not spend the budget on successes or provider failures', async () => {
+    const post = await freshPost();
+    for (let i = 0; i < 6; i++) {
+      providerAnswers(i % 2 ? 200 : 500, {});
+      const res = await post(request({ currentPassword: CURRENT, newPassword: NEXT }));
+      expect(res.status).not.toBe(429);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
 });
