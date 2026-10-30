@@ -25,6 +25,15 @@ vi.mock('@/stores/auth-store', () => ({
   },
 }));
 
+// Fork: PASSWORD_CHANGE_URL delegation (lib/external-password-change).
+// Off unless a test turns it on; off must behave exactly like upstream.
+const external = vi.hoisted(() => ({ enabled: false }));
+const changePasswordViaExternalProvider = vi.hoisted(() => vi.fn(async (_current: string, _next: string) => {}));
+vi.mock('@/lib/external-password-change-client', () => ({
+  isExternalPasswordChangeEnabled: async () => external.enabled,
+  changePasswordViaExternalProvider,
+}));
+
 import { useAccountSecurityStore } from '../account-security-store';
 import { stalwartJmap } from '@/lib/stalwart/jmap-passthrough';
 
@@ -39,6 +48,9 @@ describe('account-security-store', () => {
     mockedJmap.mockReset();
     resetStore();
     auth.isDemoMode = false;
+    external.enabled = false;
+    changePasswordViaExternalProvider.mockReset();
+    updateBasicPassword.mockClear();
   });
 
   describe('probe', () => {
@@ -320,6 +332,80 @@ describe('account-security-store', () => {
       ).rejects.toThrow('Current password is incorrect');
       expect(useAccountSecurityStore.getState().error).toBe('Current password is incorrect');
       expect(useAccountSecurityStore.getState().isSaving).toBe(false);
+    });
+
+    it('never calls the external provider when PASSWORD_CHANGE_URL is unset', async () => {
+      mockedJmap.mockResolvedValueOnce([
+        ['x:AccountPassword/set', { updated: { singleton: null } }, '0'],
+      ]);
+
+      await useAccountSecurityStore.getState().changePassword('old', 'new');
+
+      expect(changePasswordViaExternalProvider).not.toHaveBeenCalled();
+      expect(mockedJmap).toHaveBeenCalledTimes(1);
+      expect(updateBasicPassword).toHaveBeenCalledWith('new');
+    });
+
+    describe('with an external password provider (PASSWORD_CHANGE_URL)', () => {
+      beforeEach(() => {
+        external.enabled = true;
+      });
+
+      it('delegates to the provider instead of Stalwart and switches the session over', async () => {
+        await useAccountSecurityStore.getState().changePassword('old', 'new');
+
+        expect(changePasswordViaExternalProvider).toHaveBeenCalledWith('old', 'new');
+        expect(mockedJmap).not.toHaveBeenCalled();
+        expect(updateBasicPassword).toHaveBeenCalledWith('new');
+        expect(useAccountSecurityStore.getState().isSaving).toBe(false);
+        expect(useAccountSecurityStore.getState().error).toBeNull();
+      });
+
+      it('records the provider error and leaves the session password alone', async () => {
+        changePasswordViaExternalProvider.mockRejectedValueOnce(new Error('Invalid email or current password'));
+
+        await expect(
+          useAccountSecurityStore.getState().changePassword('wrong', 'new-password'),
+        ).rejects.toThrow('Invalid email or current password');
+        expect(useAccountSecurityStore.getState().error).toBe('Invalid email or current password');
+        expect(useAccountSecurityStore.getState().isSaving).toBe(false);
+        expect(updateBasicPassword).not.toHaveBeenCalled();
+        expect(mockedJmap).not.toHaveBeenCalled();
+      });
+
+      it('keeps Stalwart\'s path when a TOTP code is given, so the code is verified', async () => {
+        mockedJmap.mockResolvedValueOnce([
+          ['x:AccountPassword/set', { updated: { singleton: null } }, '0'],
+        ]);
+
+        await useAccountSecurityStore.getState().changePassword('old', 'new', ' 123456 ');
+
+        expect(changePasswordViaExternalProvider).not.toHaveBeenCalled();
+        const args = mockedJmap.mock.calls[0][0][0][1];
+        expect(args.update.singleton).toEqual({ currentSecret: 'old', secret: 'new', 'otpAuth/otpCode': '123456' });
+        expect(updateBasicPassword).toHaveBeenCalledWith('new');
+      });
+
+      it('keeps Stalwart\'s path for an account with TOTP on even without a code', async () => {
+        useAccountSecurityStore.setState({ otpEnabled: true });
+        mockedJmap.mockResolvedValueOnce([
+          ['x:AccountPassword/set', {
+            notUpdated: { singleton: { type: 'invalidProperties', description: 'TOTP code required' } },
+          }, '0'],
+        ]);
+
+        await expect(
+          useAccountSecurityStore.getState().changePassword('old', 'new'),
+        ).rejects.toThrow('TOTP code required');
+        expect(changePasswordViaExternalProvider).not.toHaveBeenCalled();
+      });
+
+      it('treats a blank TOTP code as none', async () => {
+        await useAccountSecurityStore.getState().changePassword('old', 'new', '   ');
+
+        expect(changePasswordViaExternalProvider).toHaveBeenCalledWith('old', 'new');
+        expect(mockedJmap).not.toHaveBeenCalled();
+      });
     });
   });
 

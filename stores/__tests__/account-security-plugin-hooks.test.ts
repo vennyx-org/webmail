@@ -21,6 +21,14 @@ vi.mock('@/stores/auth-store', () => ({
   },
 }));
 
+// Fork: PASSWORD_CHANGE_URL delegation, off unless a test turns it on.
+const external = vi.hoisted(() => ({ enabled: false }));
+const changePasswordViaExternalProvider = vi.hoisted(() => vi.fn(async (_current: string, _next: string) => {}));
+vi.mock('@/lib/external-password-change-client', () => ({
+  isExternalPasswordChangeEnabled: async () => external.enabled,
+  changePasswordViaExternalProvider,
+}));
+
 import { useAccountSecurityStore } from '../account-security-store';
 import { stalwartJmap } from '@/lib/stalwart/jmap-passthrough';
 import { accountSecurityHooks, clearAllHooks } from '@/lib/plugin-hooks';
@@ -60,6 +68,27 @@ describe('account security plugin hooks', () => {
     await store.changePassword('old-secret', 'new-secret', '123456');
     expect(changed).toHaveBeenCalledTimes(1);
     expect(changed).toHaveBeenCalledWith({});
+  });
+
+  it('reports an externally delegated password change only once the provider accepted it, without the password', async () => {
+    external.enabled = true;
+    try {
+      const changed = vi.fn();
+      accountSecurityHooks.onPasswordChange.register('test', changed);
+      const store = useAccountSecurityStore.getState();
+
+      changePasswordViaExternalProvider.mockRejectedValueOnce(new Error('Invalid email or current password'));
+      await expect(store.changePassword('old-secret', 'new-secret')).rejects.toThrow();
+      expect(changed).not.toHaveBeenCalled();
+
+      await store.changePassword('old-secret', 'new-secret');
+      expect(changed).toHaveBeenCalledTimes(1);
+      expect(changed).toHaveBeenCalledWith({});
+      expect(allPayloads(changed)).not.toMatch(/old-secret|new-secret/);
+      expect(jmap).not.toHaveBeenCalled();
+    } finally {
+      external.enabled = false;
+    }
   });
 
   it('reports two-factor sign-in turned on and off, without seed or code', async () => {

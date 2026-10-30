@@ -5,6 +5,7 @@ import { stalwartJmap, requireResult, type JmapMethodResponse } from '@/lib/stal
 import { isStalwartJmapPassthroughEnabled } from '@/lib/stalwart/principal';
 import { currentStoreEpoch } from '@/lib/store-epoch';
 import { accountSecurityHooks } from '@/lib/plugin-hooks';
+import { changePasswordViaExternalProvider, isExternalPasswordChangeEnabled } from '@/lib/external-password-change-client';
 
 // Security hooks fire only once the server confirmed the change, and carry no
 // secrets: never a password, TOTP seed or code, or an app password value.
@@ -601,24 +602,34 @@ export const useAccountSecurityStore = create<AccountSecurityState>()((set, get)
   changePassword: async (currentPassword, newPassword, otpCode) => {
     set({ isSaving: true, error: null });
     try {
-      const accountId = getPrimaryAccountId();
-      const responses = await stalwartJmap([
-        [
-          'x:AccountPassword/set',
-          {
-            accountId,
-            update: {
-              singleton: {
-                currentSecret: currentPassword,
-                secret: newPassword,
-                ...otpCodePatch(otpCode),
+      // Fork: a deployment whose Stalwart reads a read-only directory sets
+      // PASSWORD_CHANGE_URL, and the change goes to that provider instead
+      // (lib/external-password-change). Its contract has no TOTP code, so an
+      // account with TOTP on stays on Stalwart's path, the one that verifies
+      // the code: never drop a code on the floor. Unset, this is upstream.
+      const totpOn = !!otpCode?.trim() || get().otpEnabled;
+      if (!totpOn && (await isExternalPasswordChangeEnabled())) {
+        await changePasswordViaExternalProvider(currentPassword, newPassword);
+      } else {
+        const accountId = getPrimaryAccountId();
+        const responses = await stalwartJmap([
+          [
+            'x:AccountPassword/set',
+            {
+              accountId,
+              update: {
+                singleton: {
+                  currentSecret: currentPassword,
+                  secret: newPassword,
+                  ...otpCodePatch(otpCode),
+                },
               },
             },
-          },
-          '0',
-        ],
-      ]);
-      requireAccountPasswordUpdate(responses, 'Failed to change password');
+            '0',
+          ],
+        ]);
+        requireAccountPasswordUpdate(responses, 'Failed to change password');
+      }
       void accountSecurityHooks.onPasswordChange.emit({});
       // The session still authenticates with the old password; switch it over
       // so the next request does not bounce the user to the login page.

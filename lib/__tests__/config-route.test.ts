@@ -37,6 +37,8 @@ const MANAGED_ENV = [
   'JMAP_SERVERS', 'JMAP_SERVER_AUTO_PICK_BY_DOMAIN', 'SOURCE_CODE_URL', 'LOGIN_SHOW_REMEMBER_ME',
   'ACCESSIBILITY_STATEMENT_URL', 'ACCESSIBILITY_FEEDBACK_URL', 'HELP_URL', 'EASY_READ_URL', 'SIGN_LANGUAGE_URL',
   'LOGIN_USERNAME_PLACEHOLDER',
+  // Fork: lib/external-password-change.
+  'PASSWORD_CHANGE_URL',
 ] as const;
 
 describe('config API route', () => {
@@ -373,6 +375,21 @@ describe('config API route', () => {
       const config = await getConfig({ host: 'mail1.example.com:8443' });
 
       expect(config.loginCompanyName).toBe('Brand One');
+    });
+  });
+
+  // Fork: lib/external-password-change.
+  describe('external password-change provider flag', () => {
+    it('is left out entirely when PASSWORD_CHANGE_URL is unset (response equals upstream)', async () => {
+      const config = await getConfig();
+      expect('externalPasswordChange' in config).toBe(false);
+    });
+
+    it('is true when PASSWORD_CHANGE_URL is set, and never carries the URL', async () => {
+      vi.stubEnv('PASSWORD_CHANGE_URL', 'http://api:3001/api/self-service/mailbox-password');
+      const config = await getConfig();
+      expect(config.externalPasswordChange).toBe(true);
+      expect(JSON.stringify(config)).not.toContain('self-service');
     });
   });
 });

@@ -12,6 +12,7 @@ import {
   type BrandingOverrideKey,
 } from '@/lib/admin/domain-branding';
 import { isNoThirdPartyTrafficOn } from '@/lib/admin/third-party-mode';
+import { getPasswordChangeUrl } from '@/lib/external-password-change';
 
 /**
  * Runtime configuration endpoint
@@ -108,6 +109,10 @@ export async function GET(request: NextRequest) {
       signLanguageUrl: httpUrlOrEmpty(branded<string>('signLanguageUrl', '')),
       // Browser-side switches of lib/outgoing-hosts.ts read this (#903).
       noThirdPartyTraffic: await isNoThirdPartyTrafficOn(),
+      // Fork: password changes go to PASSWORD_CHANGE_URL
+      // (lib/external-password-change). Left out when unset, so the response
+      // stays exactly upstream's.
+      ...(getPasswordChangeUrl() ? { externalPasswordChange: true } : {}),
     },
     {
       // Runtime settings can change without new asset URLs. Prevent stale

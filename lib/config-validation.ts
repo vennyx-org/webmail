@@ -73,6 +73,8 @@ const configValidators = {
   noThirdPartyTraffic: isBoolean,
   // Lite only (lib/lite-config.ts); the server's response leaves it out.
   oauthRevokeOnSignOut: (value): value is boolean | undefined => value === undefined || typeof value === 'boolean',
+  // Fork: only present when PASSWORD_CHANGE_URL is set (lib/external-password-change).
+  externalPasswordChange: (value): value is boolean | undefined => value === undefined || typeof value === 'boolean',
 } satisfies Validators<ConfigData>;
 
 /**

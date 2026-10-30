@@ -58,6 +58,8 @@ export interface ConfigData {
   noThirdPartyTraffic: boolean;
   /** Lite only: whether sign-out revokes the refresh token (#1388). The server build decides in its token route. */
   oauthRevokeOnSignOut?: boolean;
+  /** Fork: password changes go to the external provider (PASSWORD_CHANGE_URL); absent when unset. */
+  externalPasswordChange?: boolean;
 }
 
 interface AppConfig extends ConfigData {

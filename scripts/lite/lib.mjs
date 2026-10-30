@@ -105,6 +105,8 @@ export const LITE_API_STRING_ALLOWLIST = [
   "/api/auth/verify",
   "/api/auth/stalwart-context",
   "/api/account/stalwart/jmap",
+  // Fork: lib/external-password-change-client.ts - off in Lite (no server).
+  "/api/account/change-password",
   // Admin shield probe - skipped in Lite (components/layout/navigation-rail.tsx).
   "/api/admin/auth",
   // Settings/policy - replaced by config.json / policy.json.
